@@ -1,0 +1,76 @@
+@use "./toast.scss" as toast;
+
+@import "@fontsource/inter/300.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+
+:root {
+  --primary: #121314;
+  --primary-foreground: #ffffff;
+  --primary-hover: #d0d0d0;
+  --secondary-hover: #f6f6f6;
+
+  --background: #ffffff;
+  --background-secondary: #f3f0f0;
+  --background-secondary-variant: #ffffff;
+  --background-secondary-variant-2: #dcdcdc;
+  --background-secondary-hover: #f0f0f0;
+
+  --foreground: #121314;
+  --foreground-secondary: #3f3f3f;
+  --placeholder: #999999;
+
+  --disabled: #999999;
+
+  --border: #e5e7eb;
+  --border-hover: #dcdcdc;
+
+  --accent: #18803e;
+
+  --success: #18803e;
+  --success-foreground: #ffffff;
+  --warning: #d97706;
+  --warning-foreground: #ffffff;
+  --error: #bb2121;
+  --error-hover: #c01313;
+  --error-foreground: #ffffff;
+
+  font-family: -apple-system, "Inter", system-ui, sans-serif;
+}
+
+.dark {
+  --primary: #ffffff;
+  --primary-foreground: #121314;
+  --primary-hover: #e7e6e6;
+  --secondary-hover: #1f2124;
+
+  --background: #17181c;
+  --background-secondary: #1d1f23;
+  --background-secondary-variant: #222528;
+  --background-secondary-variant-2: #2a2b2e;
+  --background-secondary-hover: #222528;
+
+  --foreground: #ffffff;
+  --foreground-secondary: #a7a4a4;
+  --placeholder: #656565;
+
+  --disabled: #555555;
+
+  --border: #333333;
+  --border-hover: #444444;
+
+  --accent: #18803e;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+}

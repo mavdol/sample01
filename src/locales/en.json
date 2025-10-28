@@ -1,0 +1,171 @@
+{
+  "locale": "en-US",
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "delete_confirmation": "Are you sure you want to delete this item?",
+    "delete_confirmation_description": "This action cannot be undone. This will permanently delete the item and all of its data.",
+    "clear": "Clear",
+    "copied": "Copied",
+    "deleted": "Deleted",
+    "saved": "Saved",
+    "error": "Error"
+  },
+  "routes": {
+    "datasets": "Datasets",
+    "models": "Models"
+  },
+  "date": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "days_ago": "{{count}} days ago",
+    "weeks_ago": "{{count}} weeks ago",
+    "months_ago": "{{count}} months ago",
+    "years_ago": "{{count}} years ago"
+  },
+  "settings": {
+    "title": "Settings",
+    "back": "Back",
+    "general": {
+      "title": "General",
+      "preferences": {
+        "title": "Preferences",
+        "language": {
+          "label": "Language",
+          "description": "Choose your preferred language",
+          "options": {
+            "english": "English"
+          }
+        },
+        "theme": {
+          "label": "Theme",
+          "description": "Choose light or dark theme",
+          "options": {
+            "light": "Light",
+            "dark": "Dark"
+          }
+        }
+      }
+    },
+    "github": "Open Github"
+  },
+  "models": {
+    "title": "Models",
+    "variant_count_singular": "{{count}} variant",
+    "variant_count_plural": "{{count}} variants",
+    "search_placeholder": "Search for a model",
+    "details": {
+      "quantization": "Quantization",
+      "size": "Size",
+      "actions": "Actions",
+      "download": "Download",
+      "downloaded": "Donwloaded",
+      "not_found": "Model not found",
+      "recommended": "Recommended"
+    }
+  },
+  "datasets": {
+    "create_dataset": "New",
+    "no_datasets_found": "No datasets found",
+    "no_datasets_found_description": "Create your first dataset to get started",
+    "no_datasets_found_for": "No datasets found named \"{{search}}\"",
+    "new": {
+      "title": "New Dataset",
+      "name": "Name",
+      "description": "Description",
+      "description_placeholder": "Describe what this dataset contains...",
+      "create": "Create Dataset",
+      "name_placeholder": "Enter dataset name",
+      "cancel": "Cancel"
+    },
+    "details": {
+      "generate": "Generate",
+      "export": "Export",
+      "last_updated": "Last Updated",
+      "created": "Created",
+      "page": "Page",
+      "rows": "row(s)",
+      "copy_cell": "Copy Cell",
+      "copy_row": "Copy Row",
+      "edit_row": "Edit Row",
+      "delete_row": "Delete Row",
+      "edit_row_description": "Edit the row data",
+      "row_deleted": "Row deleted successfully",
+      "row_selected": "row selected",
+      "rows_selected": "rows selected",
+      "copy_rows": "Copy Rows",
+      "delete_rows": "Delete Rows",
+      "cell_copied": "Cell copied to clipboard",
+      "row_copied": "Row copied to clipboard",
+      "rows_copied": "{{count}} rows copied to clipboard",
+      "copy_failed": "Failed to copy to clipboard",
+      "rows_deleted": "{{count}} rows deleted successfully",
+      "delete_row_failed": "Failed to delete row",
+      "delete_rows_failed": "Failed to delete rows",
+      "cell_updated": "Cell updated successfully",
+      "update_failed": "Failed to update cell"
+    },
+    "settings": {
+      "title": "Dataset Settings",
+      "general": {
+        "title": "General",
+        "name": "General Settings",
+        "name_description": "General settings for the dataset",
+        "dataset_name": "Dataset Name",
+        "save": "Save"
+      },
+      "advanced": {
+        "title": "Advanced Settings",
+        "delete_dataset": "Delete Dataset",
+        "delete_dataset_description": "Delete the dataset and all its data",
+        "delete_dataset_confirmation": "Are you sure you want to delete the dataset and all its data?",
+        "delete_dataset_confirmation_description": "This action cannot be undone. This will permanently delete the dataset and all of its data."
+      }
+    },
+    "generation": {
+      "select_model": "Select Model",
+      "select_model_placeholder": "Select a model",
+      "number_of_rows": "Number of Rows",
+      "number_of_rows_placeholder": "Enter the number of rows to generate",
+      "generate": "Generate rows",
+      "gpu_layers": "GPU Layers",
+      "gpu_layers_description": "Controls how many model layers run on GPU. Higher = faster but uses more GPU memory. Recommended: {{optimal}} (optimal for your hardware)",
+      "gpu_layers_optimal": "Optimal for your hardware"
+    },
+    "columns": {
+      "name_required": "Column name is required",
+      "column_type_required": "Column type is required",
+      "rules_required": "Rules are required - define how AI should generate content for this column",
+      "circular_reference_detected": "Circular reference detected - a column cannot reference itself",
+      "invalid_column_references_detected": "Invalid column references detected - referenced columns must exist",
+      "invalid_json_structure": "Invalid JSON structure",
+      "create_column_description": "Create a new column for your dataset",
+      "update_column_description": "Update the column properties",
+      "create_column": "Create Column",
+      "update_column": "Update Column",
+      "column_name": "Column Name",
+      "column_name_placeholder": "e.g., email, age, price",
+      "generation_rules": "Generation Rules",
+      "generation_rules_description": "Define how AI should generate content. Use @columnName to reference other columns.",
+      "json_structure": "JSON Structure",
+      "json_structure_description": "Define the expected JSON structure. Valid types: string, number, boolean, object, array, null",
+      "valid_json_structure": "Valid JSON structure",
+      "json_structure_required": "JSON structure is required",
+      "preview": "Preview",
+      "failed_to_save_column": "Failed to save column",
+      "delete_column": "Delete Column",
+      "empty_dataset": "Empty dataset",
+      "empty_dataset_description": "Generate your first rows to get started",
+      "column_type": "Column Type"
+    },
+    "notifications": {
+      "generation_complete": "Generation Complete",
+      "generation_complete_message": "Successfully generated {{count}} rows for {{datasetName}}",
+      "generation_cancelled": "Generation Cancelled",
+      "generation_cancelled_message": "Row generation for {{datasetName}} was cancelled",
+      "generation_failed": "Generation Failed",
+      "generation_failed_message": "Failed to generate rows for {{datasetName}}"
+    }
+  }
+}
