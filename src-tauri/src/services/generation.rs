@@ -532,6 +532,10 @@ impl GenerationService {
         word_tracker: &mut WordFrequencyTracker,
         persona_manager: &mut PersonaManager,
     ) -> Result<Vec<RowData>, GenerationError> {
+        if columns.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let mut data: Vec<RowData> = Vec::new();
 
         let current_persona = persona_manager.get_current_and_rotate();
@@ -1430,8 +1434,9 @@ mod tests {
                         .prepare_prompt(&columns, &columns[0], &row_data, &word_tracker, persona)
                         .expect("Failed to prepare prompt");
 
-                    assert!(prompt.contains("Words to avoid"));
-                    assert!(prompt.contains("john"));
+                    assert!(prompt.contains("For diversity, avoid these:"), "Prompt should contain 'For diversity, avoid these:'");
+                    assert!(prompt.contains("- Words:"), "Prompt should contain '- Words:'");
+                    assert!(prompt.contains("john"), "Prompt should contain 'john'");
                 } else {
                     println!("Skipping test due to backend initialization failure");
                 }
