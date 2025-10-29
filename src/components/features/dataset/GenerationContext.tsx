@@ -70,12 +70,15 @@ export default function GenerationContext({
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 mb-1">
             <label className="text-xs font-400 text-[var(--foreground-secondary)]">
-              {t("datasets.generation.gpu_layers")}: {gpuLayers}
+              {t("datasets.generation.gpu_layers")}:{" "}
+              <span className="font-500 text-[var(--foreground)]">
+                {gpuLayers}
+              </span>
             </label>
             <div className="group relative">
               <Info
                 size={12}
-                className="text-[var(--foreground)] cursor-help"
+                className="text-[var(--foreground-secondary)] hover:text-[var(--foreground)] cursor-help transition-colors"
               />
               <div className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-[var(--background-secondary-variant)] border border-[var(--border)] rounded text-xs text-[var(--foreground-secondary)] shadow-lg z-20">
                 {t("datasets.generation.gpu_layers_description", {
@@ -84,22 +87,41 @@ export default function GenerationContext({
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-[var(--foreground)] ">0</span>
-            <input
-              type="range"
-              min="0"
-              max="99"
-              step="1"
-              value={gpuLayers}
-              onChange={(e) => setGpuLayers(parseInt(e.target.value))}
-              className="flex-1 h-2 w-full bg-[var(--background-secondary-variant)]  rounded-lg appearance-none cursor-pointer"
-            />
-            <span className="text-xs text-[var(--foreground)]">99</span>
+          <div className="flex items-center gap-3 px-1">
+            <span className="text-xs text-[var(--foreground-secondary)]">
+              0
+            </span>
+            <div className="flex-1 relative pb-1">
+              <input
+                type="range"
+                min="0"
+                max="99"
+                step="1"
+                value={gpuLayers}
+                onChange={(e) => setGpuLayers(parseInt(e.target.value))}
+                className="slider-input w-full"
+                style={{
+                  background: (() => {
+                    const percentage = (gpuLayers / 99) * 100;
+
+                    return `linear-gradient(to right,
+                      #18803e 0%,
+                      #18803e ${Math.min(percentage, 33)}%,
+                      #d97706 ${Math.min(percentage, 66)}%,
+                      #bb2121 ${percentage}%,
+                      var(--background-secondary-variant-2) ${percentage}%,
+                      var(--background-secondary-variant-2) 100%)`;
+                  })(),
+                }}
+              />
+            </div>
+            <span className="text-xs text-[var(--foreground-secondary)]  text-right">
+              99
+            </span>
           </div>
           {gpuLayers === optimalGpuLayers && (
-            <span className="text-xs text-[var(--success)] italic">
-              ✓ {t("datasets.generation.gpu_layers_optimal")}
+            <span className="text-xs text-[var(--success)] flex items-center gap-1">
+              <span>✓</span> {t("datasets.generation.gpu_layers_optimal")}
             </span>
           )}
         </div>

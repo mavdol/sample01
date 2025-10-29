@@ -36,6 +36,7 @@ import TextInput from "@/components/ui/input/TextInput";
 import { Copy, FileJson, Edit, Trash2 } from "lucide-react";
 import { showSuccessToast, showErrorToast } from "@/lib/toast";
 import { useTheme } from "@/providers/theme.provider";
+import { useDatasetStore } from "@/stores/dataset.store";
 
 interface DatasetTableProps {
   onSelectionChange?: (
@@ -75,8 +76,9 @@ export default function DatasetTable({
     pageSize,
     hasNext,
     hasPrevious,
-    totalRows,
   } = useCurrentDataset();
+
+  const { currentDataset } = useDatasetStore();
 
   const [isSlideOverOpen, setIsSlideOverOpen] = useState(false);
   const [selectedColumn, setSelectedColumn] = useState<Column | null>(null);
@@ -787,7 +789,7 @@ export default function DatasetTable({
               className="text-xs"
               style={{ color: "var(--foreground-secondary)" }}
             >
-              {totalRows} {t("datasets.details.rows")}
+              {currentDataset?.rowCount || 0} {t("datasets.details.rows")}
             </div>
             <div className="flex items-center gap-2"></div>
           </div>

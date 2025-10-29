@@ -81,7 +81,7 @@
     },
     "details": {
       "generate": "Generate",
-      "export": "Export",
+      "export": "Export to csv",
       "last_updated": "Last Updated",
       "created": "Created",
       "page": "Page",

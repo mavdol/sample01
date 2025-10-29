@@ -26,6 +26,7 @@ interface DatasetState {
   setDatasets: (datasets: Dataset[]) => void;
   updateDataset: (datasetId: string, name: string) => Promise<Dataset>;
   deleteDataset: (datasetId: string) => Promise<Dataset>;
+  updateDatasetRowCount: (datasetId: string, rowCount: number) => void;
   resetCurrentDataset: () => void;
   setColumns: (columns: Column[]) => void;
   setRows: (rows: DatasetRow[]) => void;
@@ -35,7 +36,6 @@ interface DatasetState {
     updates: Array<{ id: number; position: number }>
   ) => void;
   removeColumnFromStore: (columnId: number) => void;
-
   generateRows: (
     modelId: number,
     totalRowsToGenerate: number,
@@ -146,6 +146,17 @@ export const useDatasetStore = create<DatasetState>((set, get) => ({
     }
 
     return response.data;
+  },
+  updateDatasetRowCount: (datasetId: string, rowCount: number) => {
+    set((state) => ({
+      datasets: state.datasets.map((d) =>
+        d.id === datasetId ? { ...d, rowCount } : d
+      ),
+      currentDataset:
+        state.currentDataset?.id === datasetId
+          ? { ...state.currentDataset, rowCount }
+          : state.currentDataset,
+    }));
   },
   resetCurrentDataset: () =>
     set({ currentDataset: null, columns: [], rows: [] }),
@@ -281,6 +292,19 @@ export const useDatasetStore = create<DatasetState>((set, get) => ({
     if (get().rows.length < MAX_ROWS_PER_PAGE) {
       set((state) => ({ rows: [...state.rows, lastRowGenerated] }));
     }
+
+    set((state) => ({
+      datasets: state.datasets.map((d) =>
+        d.id === datasetId ? { ...d, rowCount: (d.rowCount || 0) + 1 } : d
+      ),
+      currentDataset:
+        state.currentDataset?.id === datasetId
+          ? {
+              ...state.currentDataset,
+              rowCount: (state.currentDataset?.rowCount || 0) + 1,
+            }
+          : state.currentDataset,
+    }));
 
     return generation;
   },

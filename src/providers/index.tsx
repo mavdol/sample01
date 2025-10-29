@@ -11,16 +11,13 @@ export default function CustomProviders({
       {children}
       <Toaster
         position="top-center"
-        // containerStyle={{
-        //   bottom: 24,
-        //   right: 24,
-        // }}
         toastOptions={{
           style: {
             background: "transparent",
             boxShadow: "none",
             padding: 0,
           },
+          removeDelay: 100,
         }}
       />
     </ThemeProvider>

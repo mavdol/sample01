@@ -10,12 +10,29 @@ export default function Checkbox({
   ref?: RefObject<HTMLInputElement | null>;
 }) {
   return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      className="w-4 h-4 rounded cursor-pointer  accent-[var(--accent)] border-1 border-solid border-[var(--border)]"
-    />
+    <div className="relative inline-block w-4 h-4">
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="absolute inset-0 w-full h-full cursor-pointer appearance-none rounded border-1 border-solid border-[var(--border)] bg-[var(--background-secondary)] checked:bg-[var(--accent)] checked:border-[var(--accent)]"
+      />
+      {checked && (
+        <svg
+          className="absolute inset-0 pointer-events-none text-white"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={3}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M5 13l4 4L19 7"
+          />
+        </svg>
+      )}
+    </div>
   );
 }

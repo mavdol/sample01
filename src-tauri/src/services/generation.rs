@@ -25,6 +25,7 @@ use llama_cpp_2::{
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::cmp::Ordering;
 use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -424,7 +425,6 @@ impl GenerationService {
     ) -> Result<Self, AppError> {
         let llama_backend = LlamaBackend::init().map_err(|e| AppError::Io(e.to_string()))?;
 
-        // Note: Logging is enabled for debugging. Uncomment the line below to disable llama.cpp logs:
         // llama_backend.void_logs();
 
         Ok(Self {
@@ -496,6 +496,16 @@ impl GenerationService {
         let params = LlamaModelParams::default().with_n_gpu_layers(gpu_layers);
         let model_path = self.model_service.models_dir.join(model_info.filename.clone());
 
+        let model = self.get_or_load_model(&model_path, &params)?;
+        let config = InferenceConfig::default();
+
+        let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(NonZeroU32::new(config.context_size))
+            .with_n_batch(config.batch_size as u32)
+            .with_n_ubatch(config.batch_size as u32);
+
+        let mut ctx = model.new_context(&*self.llama_backend, ctx_params)?;
+
         let mut word_tracker = WordFrequencyTracker::new();
         let mut persona_manager = PersonaManager::new();
 
@@ -507,8 +517,9 @@ impl GenerationService {
             }
 
             let row_data = self.generate_row(
-                &params,
-                &model_path,
+                &model,
+                &mut ctx,
+                &config,
                 &sorted_columns,
                 &mut word_tracker,
                 &mut persona_manager,
@@ -526,8 +537,9 @@ impl GenerationService {
 
     pub fn generate_row(
         &self,
-        params: &LlamaModelParams,
-        model_path: &PathBuf,
+        model: &LlamaModel,
+        ctx: &mut llama_cpp_2::context::LlamaContext,
+        config: &InferenceConfig,
         columns: &[Column],
         word_tracker: &mut WordFrequencyTracker,
         persona_manager: &mut PersonaManager,
@@ -539,17 +551,6 @@ impl GenerationService {
         let mut data: Vec<RowData> = Vec::new();
 
         let current_persona = persona_manager.get_current_and_rotate();
-        eprintln!("current_persona: {:?}", current_persona);
-
-        let model = self.get_or_load_model(model_path, params)?;
-        let config = InferenceConfig::default();
-
-        let ctx_params = LlamaContextParams::default()
-            .with_n_ctx(NonZeroU32::new(config.context_size))
-            .with_n_batch(config.batch_size as u32)
-            .with_n_ubatch(config.batch_size as u32);
-
-        let mut ctx = model.new_context(&*self.llama_backend, ctx_params)?;
 
         for column in columns {
             let prompt = self.prepare_prompt(columns, column, &data, word_tracker, &current_persona)?;
@@ -565,20 +566,20 @@ impl GenerationService {
             };
 
             if column.column_type == "TEXT" {
-                let value = self.generate_text(&model, &mut ctx, &prompt, &config)?;
-
-                let row_data: RowData = RowData {
-                    column_id: column.id.expect("Column should have an ID").to_string(),
-                    value: value.clone(),
-                };
+                let value = self.generate_text(model, ctx, &prompt, config)?;
 
                 word_tracker.update_word_frequency(&column.name, &value, &excluded_keys);
                 word_tracker.update_phrase_frequency(&column.name, &value);
+
+                let row_data: RowData = RowData {
+                    column_id: column.id.expect("Column should have an ID").to_string(),
+                    value,
+                };
                 data.push(row_data);
             }
 
             if column.column_type == "INT" {
-                let value = self.generate_integer(&model, &mut ctx, &prompt, &config)?;
+                let value = self.generate_integer(model, ctx, &prompt, config)?;
 
                 let row_data: RowData = RowData {
                     column_id: column.id.expect("Column should have an ID").to_string(),
@@ -588,7 +589,7 @@ impl GenerationService {
             }
 
             if column.column_type == "FLOAT" {
-                let value = self.generate_float(&model, &mut ctx, &prompt, &config)?;
+                let value = self.generate_float(model, ctx, &prompt, config)?;
 
                 let row_data: RowData = RowData {
                     column_id: column.id.expect("Column should have an ID").to_string(),
@@ -599,7 +600,7 @@ impl GenerationService {
             }
 
             if column.column_type == "BOOL" {
-                let value = self.generate_bool(&model, &mut ctx, &prompt, &config)?;
+                let value = self.generate_bool(model, ctx, &prompt, config)?;
                 let row_data: RowData = RowData {
                     column_id: column.id.expect("Column should have an ID").to_string(),
                     value: value.to_string(),
@@ -609,14 +610,16 @@ impl GenerationService {
             }
 
             if column.column_type == "JSON" {
-                let value = self.generate_json(&model, &mut ctx, &prompt, &config)?;
+                let value = self.generate_json(model, ctx, &prompt, config)?;
+                let value_str = value.to_string();
+
+                word_tracker.update_word_frequency(&column.name, &value_str, &excluded_keys);
+                word_tracker.update_phrase_frequency(&column.name, &value_str);
+
                 let row_data: RowData = RowData {
                     column_id: column.id.expect("Column should have an ID").to_string(),
-                    value: value.to_string(),
+                    value: value_str,
                 };
-
-                word_tracker.update_word_frequency(&column.name, &value.to_string(), &excluded_keys);
-                word_tracker.update_phrase_frequency(&column.name, &value.to_string());
                 data.push(row_data);
             }
         }
@@ -653,7 +656,6 @@ impl GenerationService {
                 break;
             }
         }
-        eprintln!("response: {:?}", response);
 
         Ok(numeric_part.parse::<f64>().ok().map(|n| n.round() as i64).unwrap_or(0))
     }
@@ -808,24 +810,31 @@ impl GenerationService {
                 for candidate in logits_iter {
                     if top_candidates.len() < config.top_k as usize {
                         top_candidates.push(candidate);
-                        if top_candidates.len() == config.top_k as usize {
-                            top_candidates.sort_unstable_by(|a, b| {
-                                b.logit().partial_cmp(&a.logit()).unwrap_or(std::cmp::Ordering::Equal)
-                            });
+                    } else {
+
+                        let min_idx = top_candidates
+                            .iter()
+                            .enumerate()
+                            .min_by(|(_, a), (_, b)| {
+                                a.logit().partial_cmp(&b.logit()).unwrap_or(Ordering::Equal)
+                            })
+                            .map(|(idx, _)| idx)
+                            .unwrap_or(0);
+
+                        if candidate.logit() > top_candidates[min_idx].logit() {
+                            top_candidates[min_idx] = candidate;
                         }
-                    } else if candidate.logit() > top_candidates.last().unwrap().logit() {
-                        top_candidates.pop();
-                        top_candidates.push(candidate);
-                        top_candidates.sort_unstable_by(|a, b| {
-                            b.logit().partial_cmp(&a.logit()).unwrap_or(std::cmp::Ordering::Equal)
-                        });
                     }
                 }
+
+                top_candidates.sort_unstable_by(|a, b| {
+                    b.logit().partial_cmp(&a.logit()).unwrap_or(Ordering::Equal)
+                });
                 top_candidates
             } else {
                 let mut all_candidates: Vec<_> = logits_iter.collect();
                 all_candidates
-                    .sort_unstable_by(|a, b| b.logit().partial_cmp(&a.logit()).unwrap_or(std::cmp::Ordering::Equal));
+                    .sort_unstable_by(|a, b| b.logit().partial_cmp(&a.logit()).unwrap_or(Ordering::Equal));
                 all_candidates
             };
 
@@ -899,29 +908,25 @@ impl GenerationService {
         word_tracker: &WordFrequencyTracker,
         persona: &str,
     ) -> Result<String, GenerationError> {
-        let column_values: HashMap<String, &str> = row_data
+
+        let id_to_name: HashMap<String, &str> = columns
             .iter()
-            .map(|row| (row.column_id.clone(), row.value.as_str()))
+            .filter_map(|col| col.id.map(|id| (id.to_string(), col.name.as_str())))
             .collect();
 
-        let name_to_value: HashMap<String, &str> = columns
-            .iter()
-            .filter_map(|col| {
-                col.id.and_then(|id| {
-                    column_values
-                        .get(&id.to_string())
-                        .map(|&value| (col.name.clone(), value))
-                })
-            })
-            .collect();
+        let mut name_to_value: HashMap<&str, &str> = HashMap::with_capacity(row_data.len());
+        for row in row_data {
+            if let Some(&name) = id_to_name.get(&row.column_id) {
+                name_to_value.insert(name, row.value.as_str());
+            }
+        }
 
         let regex = get_column_ref_regex();
         let processed_rules = regex.replace_all(&for_column.rules, |caps: &regex::Captures| {
-            if let Some(column_name) = caps.get(1) {
-                name_to_value.get(column_name.as_str()).unwrap_or(&"").to_string()
-            } else {
-                "".to_string()
-            }
+            caps.get(1)
+                .and_then(|m| name_to_value.get(m.as_str()))
+                .copied()
+                .unwrap_or("")
         });
 
         let words_to_avoid = word_tracker.get_top_words_to_avoid(&for_column.name);
@@ -932,39 +937,36 @@ impl GenerationService {
         } else {
             let mut avoid_text = String::from("\n\nFor diversity, avoid these:");
             if !phrases_to_avoid.is_empty() {
-                avoid_text.push_str(&format!("\n- Phrases: {}", phrases_to_avoid.join(", ")));
+                avoid_text.push_str("\n- Phrases: ");
+                avoid_text.push_str(&phrases_to_avoid.join(", "));
             }
             if !words_to_avoid.is_empty() {
-                avoid_text.push_str(&format!("\n- Words: {}", words_to_avoid.join(", ")));
+                avoid_text.push_str("\n- Words: ");
+                avoid_text.push_str(&words_to_avoid.join(", "));
             }
             avoid_text
         };
 
-        let prompt = if for_column.column_type != "JSON" {
-            CELL_PROMPT_TEMPLATE
-                .replace("{persona}", persona)
-                .replace("{column_name}", &for_column.name)
-                .replace("{column_rule}", &processed_rules)
-                .replace("{format}", &for_column.column_type)
-                .replace("{words_to_avoid}", &words_to_avoid_text)
-                .replace("{return}", "Value")
+        let format_str = if for_column.column_type == "JSON" {
+            let details = for_column.column_type_details.as_deref().unwrap_or("");
+            format!("well formatted {} structure, structure details: {}", for_column.column_type, details)
         } else {
-            CELL_PROMPT_TEMPLATE
-                .replace("{persona}", persona)
-                .replace("{column_name}", &for_column.name)
-                .replace("{column_rule}", &processed_rules)
-                .replace(
-                    "{format}",
-                    format!(
-                        "well formatted {} structure, structure details: {}",
-                        for_column.column_type,
-                        for_column.column_type_details.clone().unwrap_or("".to_string())
-                    )
-                    .as_str(),
-                )
-                .replace("{words_to_avoid}", &words_to_avoid_text)
-                .replace("{return}", "Response (JSON only, no other text)")
+            for_column.column_type.clone()
         };
+
+        let return_str = if for_column.column_type == "JSON" {
+            "Response (JSON only, no other text)"
+        } else {
+            "Value (nothing else, no explanation)"
+        };
+
+        let prompt = CELL_PROMPT_TEMPLATE
+            .replace("{persona}", persona)
+            .replace("{column_name}", &for_column.name)
+            .replace("{column_rule}", &processed_rules)
+            .replace("{format}", &format_str)
+            .replace("{words_to_avoid}", &words_to_avoid_text)
+            .replace("{return}", return_str);
 
         Ok(prompt)
     }
@@ -1029,39 +1031,37 @@ impl GenerationService {
     }
 
     fn clean_text_artifacts(text: &str) -> String {
-        let mut cleaned = text.trim().to_string();
+        let mut cleaned = text.trim();
 
         loop {
-            let before = cleaned.clone();
+            let before = cleaned.len();
+            cleaned = cleaned.trim_end_matches("```").trim_end();
+            cleaned = cleaned.trim_end_matches("\\\"").trim_end();
+            cleaned = cleaned.trim_end_matches("\\n").trim_end();
+            cleaned = cleaned.trim_end_matches('\n').trim_end();
+            cleaned = cleaned.trim_end_matches("\\r").trim_end();
+            cleaned = cleaned.trim_end_matches('\r').trim_end();
 
-            cleaned = cleaned.trim_end_matches("```").trim_end().to_string();
-
-            cleaned = cleaned.trim_end_matches("\\\"").trim_end().to_string();
-
-            cleaned = cleaned.trim_end_matches("\\n").trim_end().to_string();
-            cleaned = cleaned.trim_end_matches('\n').trim_end().to_string();
-            cleaned = cleaned.trim_end_matches("\\r").trim_end().to_string();
-            cleaned = cleaned.trim_end_matches('\r').trim_end().to_string();
-
-            if before == cleaned {
+            if cleaned.len() == before {
                 break;
             }
         }
 
-        cleaned = cleaned.trim_start_matches("```").trim_start().to_string();
-        cleaned = cleaned.trim_start_matches("\\\"").trim_start().to_string();
+        cleaned = cleaned.trim_start_matches("```").trim_start();
+        cleaned = cleaned.trim_start_matches("\\\"").trim_start();
 
-        if (cleaned.starts_with('"') && cleaned.ends_with('"'))
-            || (cleaned.starts_with('\'') && cleaned.ends_with('\''))
-        {
-            if cleaned.len() > 1 {
-                cleaned = cleaned[1..cleaned.len() - 1].to_string();
+        let trimmed = cleaned.trim();
+        if trimmed.len() > 1 {
+            if (trimmed.starts_with('"') && trimmed.ends_with('"'))
+                || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+            {
+                return trimmed[1..trimmed.len() - 1].trim().to_string();
+            } else if trimmed.starts_with('"') || trimmed.starts_with('\'') {
+                return trimmed[1..].trim().to_string();
             }
-        } else if cleaned.starts_with('"') || cleaned.starts_with('\'') {
-            cleaned = cleaned[1..].to_string();
         }
 
-        cleaned.trim().to_string()
+        trimmed.to_string()
     }
 }
 
@@ -1181,7 +1181,6 @@ mod tests {
 
     mod generation_service {
         use super::*;
-        use std::path::PathBuf;
         use std::sync::Once;
 
         static INIT: Once = Once::new();
@@ -1456,34 +1455,6 @@ mod tests {
                         .expect("Failed to prepare prompt");
 
                     assert!(!prompt.contains("Words to avoid"));
-                } else {
-                    println!("Skipping test due to backend initialization failure");
-                }
-            }
-        }
-
-        mod generate_row_logic {
-            use super::*;
-
-            #[test]
-            fn test_generate_row_with_empty_columns() {
-                setup_test_environment();
-                if let Some(generation_service) = get_test_service() {
-                    let params = LlamaModelParams::default();
-                    let model_path = PathBuf::from("nonexistent_model.gguf");
-                    let columns = vec![];
-                    let mut word_tracker = WordFrequencyTracker::new();
-                    let mut persona_manager = PersonaManager::new();
-
-                    let result = generation_service.generate_row(
-                        &params,
-                        &model_path,
-                        &columns,
-                        &mut word_tracker,
-                        &mut persona_manager,
-                    );
-                    assert!(result.is_ok(), "Should succeed with empty columns");
-                    assert_eq!(result.unwrap().len(), 0, "Should return empty row data");
                 } else {
                     println!("Skipping test due to backend initialization failure");
                 }

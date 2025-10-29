@@ -14,13 +14,14 @@ import {
   Settings,
   ChevronDown,
 } from "lucide-react";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 
 import GenerationContext from "@/components/features/dataset/GenerationContext";
 import SelectionContext from "@/components/features/dataset/SelectionContext";
+import { useCurrentDataset } from "@/hooks/useCurrentDataset";
 
 export const Route = createFileRoute("/datasets/$id/")({
   component: RouteComponent,
@@ -36,6 +37,7 @@ function RouteComponent() {
     generateRows,
     cancelGeneration,
     resetCurrentDataset,
+    updateDatasetRowCount,
   } = useDatasetStore();
   const { fetchDownloadedModels } = useModelStore();
 
