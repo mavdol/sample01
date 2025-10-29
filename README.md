@@ -1,6 +1,10 @@
 # Sample01
 
-> An open-source desktop app for generating diverse and realistic synthetic tabular data using local LLMs
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
+
+An open-source desktop app for generating diverse and realistic synthetic tabular data using local LLMs.
+
+Generate tabular data locally with complete privacy and at no cost, while supporting complex relationships and consistency between columns. All processing happens on your machine, no data leaves your computer.
 
 ## ✨ Features
 
@@ -16,7 +20,7 @@
 - **Persona Rotation**: Cycles through 5 different writing styles to vary content
 - **Local Processing**: All generation happens on your machine using llama.cpp
 
-## 🚀 Getting Started
+## 🚀 Development
 
 ### Prerequisites
 
@@ -33,22 +37,21 @@ pnpm run tauri dev
 
 ## 📖 How to Use
 
-1. **Download a model** - Choose from compatible LLM models
-2. **Create your dataset** - Define columns with their types and rules
-3. **Select model & generate** - Pick your model and specify row count
-4. **Export** - Download as CSV
+> The entire flow takes place directly in the desktop app.
 
-## 🛠️ Technical Details
+```
+[ Download a model ] → [ Create your dataset ] → [ Select model & generate ] → [ Export to csv ]
+```
 
-Built with:
+## ⚠️ Limitations
 
-- **Inference Engine**: llama.cpp (Rust bindings)
-- **Architecture**: Desktop app using Tauri
-- **Export Formats**: CSV (more coming soon)
+- **Hardware Requirements**: Local model inference is resource-intensive. Faster generation requires more VRAM.
+- **GPU Layer Allocation**: You can control the number of GPU layers allocated. Note that improper configuration may cause instability.
+- **Performance**: Generation speed depends heavily on your hardware capabilities.
 
 ## 🤝 Contributing
 
-Contributions are welcome! This project is perfect for learning and experimentation.
+Contributions are welcome! This project is perfect for experimentation.
 
 ### Getting Started
 
@@ -78,9 +81,22 @@ Contributions are welcome! This project is perfect for learning and experimentat
 - Support online LLM providers (OpenAI, Anthropic, etc.)
 - Implement distributed generation for massive datasets
 
+## 🙏 Credits
+
+This project is built on top of excellent open-source tools:
+
+- **Inference Engine**: [llama-cpp-2](https://github.com/utilityai/llama-cpp-rs) - Rust bindings for llama.cpp
+- **Framework**: [Tauri](https://github.com/tauri-apps/tauri) - Build cross-platform desktop apps
+- **UI**: React + TypeScript with UnoCSS
+
 ## 📝 License
 
-[Your license here]
+This project is dual-licensed under:
+
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
+- Apache License 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+
+You may choose either license for your use.
 
 ## 💬 Questions?
 
