@@ -35,6 +35,21 @@ pnpm install
 pnpm run tauri dev
 ```
 
+> **Windows users only**: Before building, you need to install LLVM and CMake for llama-cpp to work:
+>
+> **Option 1 (Chocolatey):**
+>
+> ```bash
+> choco install llvm cmake -y
+> ```
+>
+> **Option 2 (winget):**
+>
+> ```bash
+> winget install LLVM.LLVM
+> winget install Kitware.CMake
+> ```
+
 ## 📖 How to Use
 
 > The entire flow takes place directly in the desktop app.
