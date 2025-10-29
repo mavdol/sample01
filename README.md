@@ -71,15 +71,14 @@ Contributions are welcome! This project is perfect for experimentation.
 
 **🟡 Intermediate**
 
-- Add export formats (Parquet, JSON, Excel, etc.)
-- Optimize inference performance
+- Add more export formats (Parquet, JSON, etc.)
 - Improve diversification algorithms
 
 **🔴 Hard**
 
 - Add Ollama integration
 - Support online LLM providers (OpenAI, Anthropic, etc.)
-- Implement distributed generation for massive datasets
+- Optimize inference performance
 
 ## 🙏 Credits
 
