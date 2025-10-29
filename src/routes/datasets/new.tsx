@@ -16,10 +16,8 @@ function RouteComponent() {
   const { t } = useTranslation();
 
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [errors, setErrors] = useState<{
     name?: string;
-    description?: string;
   }>({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -48,7 +46,7 @@ function RouteComponent() {
     setIsLoading(true);
 
     try {
-      const newDataset = await createDataset(name.trim(), description.trim());
+      const newDataset = await createDataset(name.trim());
 
       router.navigate({
         to: `/datasets/$id`,

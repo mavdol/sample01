@@ -30,7 +30,7 @@ export default function Select({
   value,
   defaultValue,
   onValueChange,
-  placeholder = "Sélectionner...",
+  placeholder = "select...",
   disabled = false,
   error = false,
   className = "",
@@ -41,7 +41,6 @@ export default function Select({
 
   const currentValue = value !== undefined ? value : internalValue;
 
-  // Flatten all options from both direct options and groups
   const allOptions = [
     ...(options || []),
     ...(groups || []).flatMap((group) => group.options),

@@ -4,9 +4,8 @@ import { Select } from "@/components/ui/select";
 import { useDatasetStore } from "@/stores/dataset.store";
 import { useModelStore } from "@/stores/model.store";
 import { Sparkles, Info } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
 
 export default function GenerationContext({
   onGenerate,

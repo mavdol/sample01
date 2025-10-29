@@ -20,7 +20,7 @@ interface DatasetState {
   columns: Column[];
   rows: DatasetRow[];
   generations: RowGenerationProgress[];
-  createDataset: (name: string, description: string) => Promise<Dataset>;
+  createDataset: (name: string) => Promise<Dataset>;
   fetchDatasets: () => Promise<void>;
   setCurrentDataset: (dataset: Dataset) => void;
   setDatasets: (datasets: Dataset[]) => void;
@@ -93,10 +93,10 @@ export const useDatasetStore = create<DatasetState>((set, get) => ({
   rows: [],
   generations: [],
 
-  createDataset: async (name: string, description: string) => {
+  createDataset: async (name: string) => {
     const response = await invoke<SuccessResponse<Dataset>>("create_dataset", {
       name,
-      description,
+      description: "", // not that usefull for now
     });
 
     const dataset = response.data;

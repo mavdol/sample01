@@ -248,7 +248,6 @@ function RouteComponent() {
               selectedCount={selectedRowCount}
               onCopyRows={selectionHandlers.onCopyRows}
               onDeleteRows={selectionHandlers.onDeleteRows}
-              onClear={selectionHandlers.onClearSelection}
             />
           ) : !currentGeneration ? (
             <div className="relative generate-dropdown-container">

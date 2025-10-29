@@ -6,14 +6,12 @@ interface SelectionContextProps {
   selectedCount: number;
   onCopyRows: () => void;
   onDeleteRows: () => void;
-  onClear: () => void;
 }
 
 export default function SelectionContext({
   selectedCount,
   onCopyRows,
   onDeleteRows,
-  onClear,
 }: SelectionContextProps) {
   const { t } = useTranslation();
 
