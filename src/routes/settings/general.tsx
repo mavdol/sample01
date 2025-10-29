@@ -11,7 +11,7 @@ export const Route = createFileRoute("/settings/general")({
 
 function RouteComponent() {
   const { t } = useTranslation();
-  const { theme } = useTheme();
+  const { theme, setTheme } = useTheme();
 
   const settingsItems = [
     {
@@ -25,6 +25,7 @@ function RouteComponent() {
               { value: "dark", label: "Dark" },
             ]}
             value={theme}
+            onValueChange={(value) => setTheme(value as string)}
           />
         </div>
       ),

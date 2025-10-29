@@ -1,5 +1,7 @@
 use std::process::Command;
 
+#[allow(dead_code)]
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum AppleChip {
     M1,

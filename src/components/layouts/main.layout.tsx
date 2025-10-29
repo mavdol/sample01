@@ -43,7 +43,6 @@ export default function MainLayout({
             .map((r) => decodeURIComponent(r))
             .join("/")}`;
 
-          console.log(cumulativePath);
           return (
             <div key={cumulativePath}>
               <Link

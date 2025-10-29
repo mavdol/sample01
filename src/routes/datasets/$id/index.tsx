@@ -186,8 +186,6 @@ function RouteComponent() {
         datasetId: currentDataset.id,
         filePath: filePath,
       });
-
-      console.log("Export successful!");
     } catch (error) {
       console.error("Failed to export dataset:", error);
     }
