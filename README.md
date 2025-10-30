@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 
-An open-source desktop app for generating diverse and realistic synthetic tabular data using local LLMs.
+Sample01 is an open-source desktop app for generating diverse and realistic synthetic tabular data using local LLMs.
 
 Generate tabular data locally with complete privacy and at no cost, while supporting complex relationships and consistency between columns. All processing happens on your machine, no data leaves your computer.
 
