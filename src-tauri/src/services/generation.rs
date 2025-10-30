@@ -1123,14 +1123,12 @@ mod tests {
                     }];
                     let row_data = vec![];
 
-                    // Generate 5 prompts and check they have different random values
                     let mut generated_rules = Vec::new();
                     for _ in 0..5 {
                         let prompt = generation_service
                             .prepare_prompt(&columns, &columns[0], &row_data)
                             .expect("Failed to prepare prompt");
 
-                        // Extract the rule from the prompt
                         if let Some(start) = prompt.find("Rule: ") {
                             let rule_part = &prompt[start + 6..];
                             if let Some(end) = rule_part.find("\n") {
@@ -1139,7 +1137,6 @@ mod tests {
                         }
                     }
 
-                    // Check that we got different values (at least some should be different)
                     let unique_count = generated_rules.iter().collect::<std::collections::HashSet<_>>().len();
                     assert!(unique_count > 1, "Random commands should produce different values. Got: {:?}", generated_rules);
                 } else {

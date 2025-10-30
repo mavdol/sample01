@@ -23,7 +23,7 @@ models:
     recommended: false
 ---
 
-![meta](/images/meta.png)
+![meta](/images/models/meta.png)
 
 # Llama 3.2 3B
 

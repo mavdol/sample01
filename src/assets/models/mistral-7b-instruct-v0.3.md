@@ -23,7 +23,7 @@ models:
     recommended: false
 ---
 
-![mistral](/images/mistral.png)
+![mistral](/images/models/mistral.png)
 
 # Mistral 7B Instruct v0.3
 

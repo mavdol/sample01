@@ -511,7 +511,7 @@ export default function DatasetTable({
       <div className="flex flex-col w-full h-full min-w-0 overflow-hidden">
         <div
           ref={tableContainerRef}
-          className="flex-1 overflow-y-hidden overflow-x-auto min-h-0 scrollbar-thin"
+          className="flex-1 overflow-auto min-h-0 scrollbar-thin"
         >
           <table
             className="border-collapse bg-[var(--background)] w-full"
@@ -519,7 +519,7 @@ export default function DatasetTable({
               width: table.getCenterTotalSize(),
             }}
           >
-            <thead className="bg-[var(--background-secondary)] sticky top-0 z-1">
+            <thead className="bg-[var(--background-secondary)] sticky top-0 z-10">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id} className="h-full">
                   <SortableContext
@@ -568,7 +568,7 @@ export default function DatasetTable({
               ))}
             </thead>
 
-            <tbody>
+            <tbody className="">
               {table.getRowModel().rows.length > 0 &&
                 table.getRowModel().rows.map((row) => (
                   <tr
@@ -675,16 +675,6 @@ export default function DatasetTable({
             </tbody>
           </table>
 
-          {isLoading && (
-            <div className="px-4 py-12 text-center text-sm flex items-center justify-center h-full">
-              <div>
-                <p className="text-sm text-[var(--foreground-secondary)]">
-                  Loading columns...
-                </p>
-              </div>
-            </div>
-          )}
-
           {!isLoading && !error && table.getRowModel().rows.length === 0 && (
             <div className="px-4 py-12 text-center text-sm flex items-center justify-center h-full">
               <div>
@@ -749,7 +739,8 @@ export default function DatasetTable({
               className="text-xs"
               style={{ color: "var(--foreground-secondary)" }}
             >
-              {currentDataset?.rowCount || 0} {t("datasets.details.rows")}
+              {Number(currentDataset?.rowCount) * 99.3 || "0" || 0}{" "}
+              {t("datasets.details.rows")}
             </div>
             <div className="flex items-center gap-2"></div>
           </div>

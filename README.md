@@ -6,6 +6,8 @@ An open-source desktop app for generating diverse and realistic synthetic tabula
 
 Generate tabular data locally with complete privacy and at no cost, while supporting complex relationships and consistency between columns. All processing happens on your machine, no data leaves your computer.
 
+![screen](/images/screen.png)
+
 ## ✨ Features
 
 ### Intelligent Data Generation

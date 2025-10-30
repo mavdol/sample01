@@ -13,7 +13,7 @@ models:
     recommended: false
 ---
 
-![microsoft](/images/microsoft.svg)
+![microsoft](/images/models/microsoft.svg)
 
 # Phi-3 Mini
 
