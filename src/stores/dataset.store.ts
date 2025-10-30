@@ -26,7 +26,7 @@ interface DatasetState {
   setDatasets: (datasets: Dataset[]) => void;
   updateDataset: (datasetId: string, name: string) => Promise<Dataset>;
   deleteDataset: (datasetId: string) => Promise<Dataset>;
-  updateDatasetRowCount: (datasetId: string, rowCount: number) => void;
+  decrementDatasetRowCount: (datasetId: string) => void;
   resetCurrentDataset: () => void;
   setColumns: (columns: Column[]) => void;
   setRows: (rows: DatasetRow[]) => void;
@@ -147,14 +147,17 @@ export const useDatasetStore = create<DatasetState>((set, get) => ({
 
     return response.data;
   },
-  updateDatasetRowCount: (datasetId: string, rowCount: number) => {
+  decrementDatasetRowCount: (datasetId: string) => {
     set((state) => ({
       datasets: state.datasets.map((d) =>
-        d.id === datasetId ? { ...d, rowCount } : d
+        d.id === datasetId ? { ...d, rowCount: d.rowCount - 1 } : d
       ),
       currentDataset:
         state.currentDataset?.id === datasetId
-          ? { ...state.currentDataset, rowCount }
+          ? {
+              ...state.currentDataset,
+              rowCount: state.currentDataset.rowCount - 1,
+            }
           : state.currentDataset,
     }));
   },

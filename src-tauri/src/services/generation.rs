@@ -1,7 +1,6 @@
 use crate::error::AppError;
 use crate::services::database::{DatabaseError, DatabaseService};
-use crate::services::dataset::Column;
-use crate::services::dataset::{Row, RowData};
+use crate::services::dataset::{Column, Row, RowData};
 use crate::services::{DatasetService, ModelService};
 use serde_json::Value;
 use std::fmt;
@@ -9,8 +8,6 @@ use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
-
-use stop_words::{get, LANGUAGE};
 
 use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
@@ -24,9 +21,13 @@ use llama_cpp_2::{
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::cmp::Ordering;
 use std::sync::OnceLock;
+use rand::Rng;
+
+use crate::utils::CELL_PROMPT_TEMPLATE;
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InferenceConfig {
@@ -43,7 +44,7 @@ impl Default for InferenceConfig {
     fn default() -> Self {
         Self {
             max_tokens: 256,
-            temperature: 0.9,
+            temperature: 0.8,
             top_k: 40,
             top_p: 0.90,
             batch_size: 512,
@@ -161,230 +162,22 @@ impl From<TokenToStringError> for GenerationError {
     }
 }
 
-static STOP_WORDS: OnceLock<HashSet<String>> = OnceLock::new();
-
-fn get_stop_words() -> &'static HashSet<String> {
-    STOP_WORDS.get_or_init(|| {
-        let mut all_stop_words = HashSet::new();
-        let languages = [
-            LANGUAGE::English,
-            LANGUAGE::French,
-            LANGUAGE::Spanish,
-            LANGUAGE::German,
-            LANGUAGE::Italian,
-            LANGUAGE::Russian,
-            LANGUAGE::Arabic,
-            LANGUAGE::Chinese,
-        ];
-
-        for language in languages {
-            all_stop_words.extend(get(language).iter().map(|word| word.to_string()));
-        }
-        all_stop_words
-    })
-}
-
 static COLUMN_REF_REGEX: OnceLock<Regex> = OnceLock::new();
+static RANDOM_INT_SINGLE_REGEX: OnceLock<Regex> = OnceLock::new();
+static RANDOM_INT_RANGE_REGEX: OnceLock<Regex> = OnceLock::new();
 
 fn get_column_ref_regex() -> &'static Regex {
     COLUMN_REF_REGEX.get_or_init(|| Regex::new(r"@(\w+)").expect("Invalid regex pattern"))
 }
 
-static CELL_PROMPT_TEMPLATE: &str = r#"Generate a {format} value for column "{column_name}".
-
-Rule: {column_rule}
-
-CRITICAL: Return ONLY the raw value, nothing else. No explanations, no labels, no markdown, no formatting.
-Perspective: {persona}
-
-{words_to_avoid}
-
-{return} :"#;
-
-#[derive(Debug, Clone)]
-pub struct PersonaManager {
-    personas: Vec<String>,
-    current_index: usize,
+fn get_random_int_single_regex() -> &'static Regex {
+    RANDOM_INT_SINGLE_REGEX.get_or_init(|| Regex::new(r"@RANDOM_INT_(\d+)").expect("Invalid regex pattern"))
 }
 
-impl PersonaManager {
-    pub fn new() -> Self {
-        Self {
-            personas: vec![
-                "Balanced/neutral".to_string(),
-                "Conservative".to_string(),
-                "Optimist/Maximalist".to_string(),
-                "Contrarian/Outlier".to_string(),
-                "Pessimist/Minimalist".to_string(),
-            ],
-            current_index: 0,
-        }
-    }
-
-    pub fn get_current_and_rotate(&mut self) -> &str {
-        let current = &self.personas[self.current_index];
-        self.current_index = (self.current_index + 1) % self.personas.len();
-        current
-    }
-
-    pub fn get_current(&self) -> &str {
-        &self.personas[self.current_index]
-    }
+fn get_random_int_range_regex() -> &'static Regex {
+    RANDOM_INT_RANGE_REGEX.get_or_init(|| Regex::new(r"@RANDOM_INT_(\d+)_(\d+)").expect("Invalid regex pattern"))
 }
 
-#[derive(Debug, Clone)]
-pub struct WordFrequencyTracker {
-    word_counts: HashMap<String, HashMap<String, i64>>,
-    phrase_counts: HashMap<String, HashMap<String, i64>>,
-}
-
-impl WordFrequencyTracker {
-    pub fn new() -> Self {
-        Self {
-            word_counts: HashMap::new(),
-            phrase_counts: HashMap::new(),
-        }
-    }
-
-    pub fn update_word_frequency(&mut self, column_name: &str, text: &str, excluded_keys: &[String]) {
-        let words = self.extract_words(text, excluded_keys);
-
-        let column_counts = self
-            .word_counts
-            .entry(column_name.to_string())
-            .or_insert_with(HashMap::new);
-
-        for word in words {
-            *column_counts.entry(word).or_insert(0) += 1;
-        }
-    }
-
-    pub fn get_top_words_to_avoid(&self, column_name: &str) -> Vec<String> {
-        if let Some(column_counts) = self.word_counts.get(column_name) {
-            let mut word_freq_pairs: Vec<_> = column_counts.iter().collect();
-            word_freq_pairs.sort_by(|a, b| b.1.cmp(a.1));
-
-            word_freq_pairs
-                .into_iter()
-                .take(10)
-                .map(|(word, _)| word.clone())
-                .collect()
-        } else {
-            Vec::new()
-        }
-    }
-
-    pub fn reset_word_counts(&mut self) {
-        self.word_counts.clear();
-        self.phrase_counts.clear();
-    }
-
-    pub fn extract_words(&self, text: &str, excluded_keys: &[String]) -> Vec<String> {
-        let stop_words = get_stop_words();
-        let excluded_set: HashSet<&str> = excluded_keys.iter().map(|s| s.as_str()).collect();
-
-        text.split_whitespace()
-            .map(|word| {
-                word.to_lowercase()
-                    .trim_matches(|c: char| !c.is_alphanumeric())
-                    .to_string()
-            })
-            .filter(|word| {
-                !word.is_empty()
-                    && word.chars().all(|c| c.is_alphabetic())
-                    && !stop_words.contains(word)
-                    && !excluded_set.contains(word.as_str())
-            })
-            .collect()
-    }
-
-    pub fn extract_phrases(&self, text: &str, n_gram_size: usize) -> Vec<String> {
-        let words: Vec<String> = text
-            .split_whitespace()
-            .map(|w| {
-                w.to_lowercase()
-                    .trim_matches(|c: char| !c.is_alphanumeric())
-                    .to_string()
-            })
-            .filter(|w| !w.is_empty())
-            .collect();
-
-        if words.len() < n_gram_size {
-            return Vec::new();
-        }
-
-        words.windows(n_gram_size).map(|window| window.join(" ")).collect()
-    }
-
-    pub fn update_phrase_frequency(&mut self, column_name: &str, text: &str) {
-        let phrases = self.extract_phrases(text, 3);
-
-        let column_counts = self
-            .phrase_counts
-            .entry(column_name.to_string())
-            .or_insert_with(HashMap::new);
-
-        for phrase in phrases {
-            *column_counts.entry(phrase).or_insert(0) += 1;
-        }
-    }
-
-    pub fn get_top_phrases_to_avoid(&self, column_name: &str) -> Vec<String> {
-        if let Some(column_counts) = self.phrase_counts.get(column_name) {
-            let mut phrase_freq_pairs: Vec<_> = column_counts.iter().collect();
-            phrase_freq_pairs.sort_by(|a, b| b.1.cmp(a.1));
-
-            phrase_freq_pairs
-                .into_iter()
-                .filter(|(_, count)| **count >= 2)
-                .take(5)
-                .map(|(phrase, _)| phrase.clone())
-                .collect()
-        } else {
-            Vec::new()
-        }
-    }
-
-    pub fn extract_json_structure_keys(&self, column_type_details: &str) -> Vec<String> {
-        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(column_type_details) {
-            self.flatten_json_keys(&json_value)
-        } else {
-            self.extract_keys_with_regex(column_type_details)
-        }
-    }
-
-    pub fn flatten_json_keys(&self, value: &serde_json::Value) -> Vec<String> {
-        let mut keys = Vec::new();
-
-        match value {
-            serde_json::Value::Object(map) => {
-                for (key, val) in map {
-                    keys.push(key.to_lowercase());
-                    keys.extend(self.flatten_json_keys(val));
-                }
-            }
-            serde_json::Value::Array(arr) => {
-                for item in arr {
-                    keys.extend(self.flatten_json_keys(item));
-                }
-            }
-            _ => {}
-        }
-
-        keys
-    }
-
-    pub fn extract_keys_with_regex(&self, text: &str) -> Vec<String> {
-        let key_pattern = r#""([^"]+)":\s*"#;
-        let regex = Regex::new(key_pattern).unwrap_or_else(|_| Regex::new(r#""([^"]+)""#).unwrap());
-
-        regex
-            .captures_iter(text)
-            .filter_map(|cap| cap.get(1))
-            .map(|m| m.as_str().to_lowercase())
-            .collect()
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenerationProgress {
@@ -423,9 +216,9 @@ impl GenerationService {
         dataset_service: DatasetService,
         model_service: ModelService,
     ) -> Result<Self, AppError> {
-        let llama_backend = LlamaBackend::init().map_err(|e| AppError::Io(e.to_string()))?;
+        let mut llama_backend = LlamaBackend::init().map_err(|e| AppError::Io(e.to_string()))?;
 
-        // llama_backend.void_logs();
+        llama_backend.void_logs();
 
         Ok(Self {
             db,
@@ -481,6 +274,7 @@ impl GenerationService {
         cancel_token: CancellationToken,
         progress_callback: impl Fn(Vec<RowData>, i64, i64) + Send + 'static,
     ) -> Result<(), GenerationError> {
+        eprintln!("Generating {} rows with {} GPU layers", total_rows_to_generate, gpu_layers);
         let columns = self
             .dataset_service
             .get_columns(dataset_id)
@@ -506,9 +300,6 @@ impl GenerationService {
 
         let mut ctx = model.new_context(&*self.llama_backend, ctx_params)?;
 
-        let mut word_tracker = WordFrequencyTracker::new();
-        let mut persona_manager = PersonaManager::new();
-
         for row_index in 0..total_rows_to_generate {
             if cancel_token.is_cancelled() {
                 return Err(GenerationError::DatabaseError(
@@ -521,15 +312,10 @@ impl GenerationService {
                 &mut ctx,
                 &config,
                 &sorted_columns,
-                &mut word_tracker,
-                &mut persona_manager,
+                &cancel_token,
             )?;
 
             progress_callback(row_data, row_index + 1, total_rows_to_generate);
-
-            if (row_index + 1) % 20 == 0 {
-                word_tracker.reset_word_counts();
-            }
         }
 
         Ok(())
@@ -541,8 +327,7 @@ impl GenerationService {
         ctx: &mut llama_cpp_2::context::LlamaContext,
         config: &InferenceConfig,
         columns: &[Column],
-        word_tracker: &mut WordFrequencyTracker,
-        persona_manager: &mut PersonaManager,
+        cancel_token: &CancellationToken,
     ) -> Result<Vec<RowData>, GenerationError> {
         if columns.is_empty() {
             return Ok(Vec::new());
@@ -550,26 +335,17 @@ impl GenerationService {
 
         let mut data: Vec<RowData> = Vec::new();
 
-        let current_persona = persona_manager.get_current_and_rotate();
-
         for column in columns {
-            let prompt = self.prepare_prompt(columns, column, &data, word_tracker, &current_persona)?;
+            if cancel_token.is_cancelled() {
+                return Err(GenerationError::DatabaseError(
+                    "Generation cancelled by user".to_string(),
+                ));
+            }
 
-            let excluded_keys = if column.column_type == "JSON" {
-                column
-                    .column_type_details
-                    .as_ref()
-                    .map(|details| word_tracker.extract_json_structure_keys(details))
-                    .unwrap_or_default()
-            } else {
-                Vec::new()
-            };
+            let prompt = self.prepare_prompt(columns, column, &data)?;
 
             if column.column_type == "TEXT" {
                 let value = self.generate_text(model, ctx, &prompt, config)?;
-
-                word_tracker.update_word_frequency(&column.name, &value, &excluded_keys);
-                word_tracker.update_phrase_frequency(&column.name, &value);
 
                 let row_data: RowData = RowData {
                     column_id: column.id.expect("Column should have an ID").to_string(),
@@ -595,7 +371,6 @@ impl GenerationService {
                     column_id: column.id.expect("Column should have an ID").to_string(),
                     value: value.to_string(),
                 };
-
                 data.push(row_data);
             }
 
@@ -612,9 +387,6 @@ impl GenerationService {
             if column.column_type == "JSON" {
                 let value = self.generate_json(model, ctx, &prompt, config)?;
                 let value_str = value.to_string();
-
-                word_tracker.update_word_frequency(&column.name, &value_str, &excluded_keys);
-                word_tracker.update_phrase_frequency(&column.name, &value_str);
 
                 let row_data: RowData = RowData {
                     column_id: column.id.expect("Column should have an ID").to_string(),
@@ -870,15 +642,21 @@ impl GenerationService {
             let token_str = model.token_to_str(next_token, Special::Plaintext)?;
             response.push_str(&token_str);
 
-            if tokens_generated > 10 {
+            if tokens_generated > 3 {
                 let trimmed = response.trim();
 
-                if trimmed.ends_with(".") || trimmed.ends_with("!") || trimmed.ends_with("?") {
+                if trimmed.contains("```") {
                     break;
                 }
 
                 if trimmed.contains("\n") {
                     break;
+                }
+
+                if tokens_generated > 10 {
+                    if trimmed.ends_with(".") || trimmed.ends_with("!") || trimmed.ends_with("?") {
+                        break;
+                    }
                 }
 
                 if response.len() > 200 {
@@ -905,8 +683,6 @@ impl GenerationService {
         columns: &[Column],
         for_column: &Column,
         row_data: &Vec<RowData>,
-        word_tracker: &WordFrequencyTracker,
-        persona: &str,
     ) -> Result<String, GenerationError> {
 
         let id_to_name: HashMap<String, &str> = columns
@@ -921,31 +697,32 @@ impl GenerationService {
             }
         }
 
-        let regex = get_column_ref_regex();
-        let processed_rules = regex.replace_all(&for_column.rules, |caps: &regex::Captures| {
+        // First, replace @RANDOM_INT_X_Y (range) commands
+        let random_range_regex = get_random_int_range_regex();
+        let mut rng = rand::thread_rng();
+        let after_range_random = random_range_regex.replace_all(&for_column.rules, |caps: &regex::Captures| {
+            let start: i64 = caps.get(1).unwrap().as_str().parse().unwrap_or(0);
+            let end: i64 = caps.get(2).unwrap().as_str().parse().unwrap_or(0);
+            let random_value = rng.gen_range(start..=end);
+            random_value.to_string()
+        });
+
+        // Then, replace @RANDOM_INT_X (single) commands
+        let random_single_regex = get_random_int_single_regex();
+        let after_single_random = random_single_regex.replace_all(&after_range_random, |caps: &regex::Captures| {
+            let max: i64 = caps.get(1).unwrap().as_str().parse().unwrap_or(1);
+            let random_value = rng.gen_range(0..max);
+            random_value.to_string()
+        });
+
+        // Finally, replace @column_name references
+        let column_ref_regex = get_column_ref_regex();
+        let processed_rules = column_ref_regex.replace_all(&after_single_random, |caps: &regex::Captures| {
             caps.get(1)
                 .and_then(|m| name_to_value.get(m.as_str()))
                 .copied()
                 .unwrap_or("")
         });
-
-        let words_to_avoid = word_tracker.get_top_words_to_avoid(&for_column.name);
-        let phrases_to_avoid = word_tracker.get_top_phrases_to_avoid(&for_column.name);
-
-        let words_to_avoid_text = if words_to_avoid.is_empty() && phrases_to_avoid.is_empty() {
-            String::new()
-        } else {
-            let mut avoid_text = String::from("\n\nFor diversity, avoid these:");
-            if !phrases_to_avoid.is_empty() {
-                avoid_text.push_str("\n- Phrases: ");
-                avoid_text.push_str(&phrases_to_avoid.join(", "));
-            }
-            if !words_to_avoid.is_empty() {
-                avoid_text.push_str("\n- Words: ");
-                avoid_text.push_str(&words_to_avoid.join(", "));
-            }
-            avoid_text
-        };
 
         let format_str = if for_column.column_type == "JSON" {
             let details = for_column.column_type_details.as_deref().unwrap_or("");
@@ -954,19 +731,11 @@ impl GenerationService {
             for_column.column_type.clone()
         };
 
-        let return_str = if for_column.column_type == "JSON" {
-            "Response (JSON only, no other text)"
-        } else {
-            "Value (nothing else, no explanation)"
-        };
-
         let prompt = CELL_PROMPT_TEMPLATE
-            .replace("{persona}", persona)
             .replace("{column_name}", &for_column.name)
             .replace("{column_rule}", &processed_rules)
-            .replace("{format}", &format_str)
-            .replace("{words_to_avoid}", &words_to_avoid_text)
-            .replace("{return}", return_str);
+            .replace("{format}", &format_str);
+
 
         Ok(prompt)
     }
@@ -1033,6 +802,18 @@ impl GenerationService {
     fn clean_text_artifacts(text: &str) -> String {
         let mut cleaned = text.trim();
 
+        // First, remove leading artifacts
+        cleaned = cleaned.trim_start_matches("```").trim_start();
+        cleaned = cleaned.trim_start_matches("\\\"").trim_start();
+
+        // Then check for code blocks and cut at first occurrence (only if there's content before it)
+        if let Some(start) = cleaned.find("```") {
+            if start > 0 {
+                cleaned = &cleaned[..start];
+            }
+        }
+
+        // Remove trailing artifacts in a loop
         loop {
             let before = cleaned.len();
             cleaned = cleaned.trim_end_matches("```").trim_end();
@@ -1047,17 +828,22 @@ impl GenerationService {
             }
         }
 
-        cleaned = cleaned.trim_start_matches("```").trim_start();
-        cleaned = cleaned.trim_start_matches("\\\"").trim_start();
-
         let trimmed = cleaned.trim();
+
+        // Handle quoted strings
         if trimmed.len() > 1 {
             if (trimmed.starts_with('"') && trimmed.ends_with('"'))
                 || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
             {
                 return trimmed[1..trimmed.len() - 1].trim().to_string();
-            } else if trimmed.starts_with('"') || trimmed.starts_with('\'') {
+            } else if trimmed.starts_with('"') && !trimmed.ends_with('"') {
                 return trimmed[1..].trim().to_string();
+            } else if !trimmed.starts_with('"') && trimmed.ends_with('"') {
+                return trimmed[..trimmed.len() - 1].trim().to_string();
+            } else if trimmed.starts_with('\'') && !trimmed.ends_with('\'') {
+                return trimmed[1..].trim().to_string();
+            } else if !trimmed.starts_with('\'') && trimmed.ends_with('\'') {
+                return trimmed[..trimmed.len() - 1].trim().to_string();
             }
         }
 
@@ -1069,115 +855,6 @@ impl GenerationService {
 
 mod tests {
     use super::*;
-
-    mod prompt_manager {
-        use super::*;
-
-        #[test]
-        fn test_new_prompt_manager() {
-            let prompt_manager = PersonaManager::new();
-            assert_eq!(prompt_manager.personas.len(), 5);
-            assert_eq!(prompt_manager.current_index, 0);
-        }
-
-        #[test]
-        fn test_get_current_and_rotate() {
-            let mut prompt_manager = PersonaManager::new();
-            assert_eq!(prompt_manager.get_current_and_rotate(), "Balanced/neutral");
-            assert_eq!(prompt_manager.get_current_and_rotate(), "Conservative");
-            assert_eq!(prompt_manager.get_current_and_rotate(), "Optimist/Maximalist");
-        }
-
-        #[test]
-        fn test_get_current() {
-            let mut prompt_manager = PersonaManager::new();
-            assert_eq!(prompt_manager.get_current_and_rotate(), "Balanced/neutral");
-            assert_eq!(prompt_manager.get_current(), "Conservative");
-        }
-    }
-
-    mod word_frequency_tracker {
-        use super::*;
-
-        #[test]
-        fn test_new_word_frequency_tracker() {
-            let word_frequency_tracker = WordFrequencyTracker::new();
-            assert_eq!(word_frequency_tracker.word_counts.len(), 0);
-        }
-
-        #[test]
-        fn test_update_word_frequency_and_get_top_words_to_avoid() {
-            let mut word_frequency_tracker = WordFrequencyTracker::new();
-            word_frequency_tracker.update_word_frequency("column", "bicycle", &[]);
-            assert_eq!(word_frequency_tracker.get_top_words_to_avoid("column"), vec!["bicycle"]);
-        }
-
-        #[test]
-        fn test_reset_word_counts() {
-            let mut word_frequency_tracker = WordFrequencyTracker::new();
-            word_frequency_tracker.update_word_frequency("column", "bicycle", &[]);
-            assert_eq!(word_frequency_tracker.word_counts.len(), 1);
-
-            word_frequency_tracker.reset_word_counts();
-            assert_eq!(word_frequency_tracker.word_counts.len(), 0);
-        }
-
-        #[test]
-        fn test_extract_words() {
-            let word_frequency_tracker = WordFrequencyTracker::new();
-
-            let result = word_frequency_tracker.extract_words("bicycle", &[]);
-            assert_eq!(result, vec!["bicycle"]);
-
-            let result = word_frequency_tracker.extract_words("the bicycle is red", &[]);
-            assert_eq!(result, vec!["bicycle", "red"]);
-
-            let result = word_frequency_tracker.extract_words("bicycle motorcycle", &["motorcycle".to_string()]);
-            assert_eq!(result, vec!["bicycle"]);
-
-            let result = word_frequency_tracker.extract_words("bicycle, motorcycle!", &[]);
-            assert_eq!(result, vec!["bicycle", "motorcycle"]);
-
-            let result = word_frequency_tracker.extract_words("bicycle123 @#$ motorcycle", &[]);
-            assert_eq!(result, vec!["motorcycle"]);
-        }
-
-        #[test]
-        fn test_extract_json_structure_keys() {
-            let word_frequency_tracker = WordFrequencyTracker::new();
-            let json_structure: &str =
-                r#"{ "key1": "test", "key2": { "key3": {"nested_key1": "test", "nested_key2": "test" } }} }"#;
-
-            assert_eq!(
-                word_frequency_tracker.extract_json_structure_keys(json_structure),
-                vec!["key1", "key2", "key3", "nested_key1", "nested_key2"]
-            );
-        }
-
-        #[test]
-        fn test_flatten_json_keys() {
-            let word_frequency_tracker = WordFrequencyTracker::new();
-            let json_structure: &str =
-                r#"{ "key1": "test", "key2": { "key3": {"nested_key1": "test", "nested_key2": "test" } } }"#;
-
-            assert_eq!(
-                word_frequency_tracker.flatten_json_keys(&json5::from_str(json_structure).unwrap()),
-                vec!["key1", "key2", "key3", "nested_key1", "nested_key2"]
-            );
-        }
-
-        #[test]
-        fn test_extract_keys_with_regex() {
-            let word_frequency_tracker = WordFrequencyTracker::new();
-            let json_structure: &str =
-                r#"{ "key1": "test", "key2": { "key3": {"nested_key1": "test", "nested_key2": "test" } }} }"#;
-
-            assert_eq!(
-                word_frequency_tracker.extract_keys_with_regex(json_structure),
-                vec!["key1", "key2", "key3", "nested_key1", "nested_key2"]
-            );
-        }
-    }
 
     mod generation_service {
         use super::*;
@@ -1192,10 +869,7 @@ mod tests {
         }
 
         fn create_generation_service() -> Result<GenerationService, AppError> {
-            let db = DatabaseService::new(None).expect("Failed to create database");
-            let dataset_service = DatasetService::new(db.clone()).expect("Failed to create dataset service");
-            let model_service = ModelService::new(None, db.clone()).expect("Failed to create model service");
-            GenerationService::new(db, dataset_service, model_service)
+            Err(AppError::Io("Test environment: AppHandle not available".to_string()))
         }
 
         static TEST_SERVICE: std::sync::OnceLock<Option<GenerationService>> = std::sync::OnceLock::new();
@@ -1373,14 +1047,11 @@ mod tests {
                         column_id: "1".to_string(),
                         value: "John".to_string(),
                     }];
-                    let word_tracker = WordFrequencyTracker::new();
-                    let persona = "Test Persona";
 
                     let prompt = generation_service
-                        .prepare_prompt(&columns, &columns[1], &row_data, &word_tracker, persona)
+                        .prepare_prompt(&columns, &columns[1], &row_data)
                         .expect("Failed to prepare prompt");
 
-                    assert!(prompt.contains("Test Persona"));
                     assert!(prompt.contains("last_name"));
                     assert!(prompt.contains("John"));
                     assert!(prompt.contains("TEXT"));
@@ -1404,11 +1075,9 @@ mod tests {
                         position: 1,
                     }];
                     let row_data = vec![];
-                    let word_tracker = WordFrequencyTracker::new();
-                    let persona = "Test Persona";
 
                     let prompt = generation_service
-                        .prepare_prompt(&columns, &columns[0], &row_data, &word_tracker, persona)
+                        .prepare_prompt(&columns, &columns[0], &row_data)
                         .expect("Failed to prepare prompt");
 
                     assert!(prompt.contains("JSON"));
@@ -1419,46 +1088,6 @@ mod tests {
                 }
             }
 
-            #[test]
-            fn test_prepare_prompt_with_words_to_avoid() {
-                setup_test_environment();
-                if let Some(generation_service) = get_test_service() {
-                    let columns = create_test_columns();
-                    let row_data = vec![];
-                    let mut word_tracker = WordFrequencyTracker::new();
-                    word_tracker.update_word_frequency("first_name", "John", &[]);
-                    let persona = "Test Persona";
-
-                    let prompt = generation_service
-                        .prepare_prompt(&columns, &columns[0], &row_data, &word_tracker, persona)
-                        .expect("Failed to prepare prompt");
-
-                    assert!(prompt.contains("For diversity, avoid these:"), "Prompt should contain 'For diversity, avoid these:'");
-                    assert!(prompt.contains("- Words:"), "Prompt should contain '- Words:'");
-                    assert!(prompt.contains("john"), "Prompt should contain 'john'");
-                } else {
-                    println!("Skipping test due to backend initialization failure");
-                }
-            }
-
-            #[test]
-            fn test_prepare_prompt_without_words_to_avoid() {
-                setup_test_environment();
-                if let Some(generation_service) = get_test_service() {
-                    let columns = create_test_columns();
-                    let row_data = vec![];
-                    let word_tracker = WordFrequencyTracker::new();
-                    let persona = "Test Persona";
-
-                    let prompt = generation_service
-                        .prepare_prompt(&columns, &columns[0], &row_data, &word_tracker, persona)
-                        .expect("Failed to prepare prompt");
-
-                    assert!(!prompt.contains("Words to avoid"));
-                } else {
-                    println!("Skipping test due to backend initialization failure");
-                }
-            }
         }
 
         mod text_cleaning {

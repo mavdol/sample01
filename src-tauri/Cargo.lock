@@ -4225,6 +4225,7 @@ dependencies = [
  "json5",
  "llama-cpp-2",
  "mockito",
+ "rand 0.8.5",
  "regex 1.11.3",
  "reqwest",
  "rusqlite",

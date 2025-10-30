@@ -11,14 +11,15 @@ Generate tabular data locally with complete privacy and at no cost, while suppor
 ### Intelligent Data Generation
 
 - **DAG-based Pipeline**: Row generation follows a strict, deterministic pipeline where each column has its own rules
-- **Column Dependencies**: Reference other columns in your rules (e.g., `@Column1 + @Column2`)
+- **Column Dependencies**: Reference other columns in your rules (e.g., `@firstName @lastName` for full names)
+- **Random Value Commands**: Control diversity with `@RANDOM_INT_X` and `@RANDOM_INT_X_Y` in your rules for predictable randomization
 - **Strict Typing**: Each column enforces a specific type (text, int, float, JSON, etc.) for consistency and quality
 
-### Quality & Diversity
+### Quality & Control
 
-- **Smart Diversification**: Identifies and avoids overused words and patterns
-- **Persona Rotation**: Cycles through 5 different writing styles to vary content
-- **Local Processing**: All generation happens on your machine using llama.cpp
+- **User-Controlled Diversity**: Use `@RANDOM_INT` commands to inject randomness exactly where you need it
+- **Consistent Relationships**: Column references ensure data consistency (e.g., email derived from name)
+- **Local Processing**: All generation happens on your machine using llama.cpp - complete privacy, no API costs
 
 ## 🚀 Development
 
@@ -87,7 +88,7 @@ Contributions are welcome! This project is perfect for experimentation.
 **🟡 Intermediate**
 
 - Add more export formats (Parquet, JSON, etc.)
-- Improve diversification algorithms
+- Add more random command types (`@RANDOM_FLOAT`, `@RANDOM_DATE`, etc.)
 
 **🔴 Hard**
 

@@ -57,8 +57,7 @@ export default function DatasetTable({
   const [columnResizeMode] = useState<ColumnResizeMode>("onChange");
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
 
-  const headerScrollRef = useRef<HTMLDivElement>(null);
-  const bodyScrollRef = useRef<HTMLDivElement>(null);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -110,33 +109,6 @@ export default function DatasetTable({
     const sortedColumns = [...columns].sort((a, b) => a.position - b.position);
     setColumnOrder(sortedColumns.map((col) => col.id!.toString()));
   }, [columns]);
-
-  useEffect(() => {
-    const headerEl = headerScrollRef.current;
-    const bodyEl = bodyScrollRef.current;
-
-    if (!headerEl || !bodyEl) return;
-
-    const syncHeaderScroll = () => {
-      if (bodyEl) {
-        bodyEl.scrollLeft = headerEl.scrollLeft;
-      }
-    };
-
-    const syncBodyScroll = () => {
-      if (headerEl) {
-        headerEl.scrollLeft = bodyEl.scrollLeft;
-      }
-    };
-
-    headerEl.addEventListener("scroll", syncHeaderScroll);
-    bodyEl.addEventListener("scroll", syncBodyScroll);
-
-    return () => {
-      headerEl.removeEventListener("scroll", syncHeaderScroll);
-      bodyEl.removeEventListener("scroll", syncBodyScroll);
-    };
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -538,16 +510,16 @@ export default function DatasetTable({
     >
       <div className="flex flex-col w-full h-full min-w-0 overflow-hidden">
         <div
-          ref={headerScrollRef}
-          className="flex-shrink-0 overflow-x-auto overflow-y-hidden select-none"
+          ref={tableContainerRef}
+          className="flex-1 overflow-y-hidden overflow-x-auto min-h-0 scrollbar-thin"
         >
           <table
-            className="border-collapse bg-[var(--background)]"
+            className="border-collapse bg-[var(--background)] w-full"
             style={{
               width: table.getCenterTotalSize(),
             }}
           >
-            <thead className="bg-[var(--background-secondary)]">
+            <thead className="bg-[var(--background-secondary)] sticky top-0 z-1">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id} className="h-full">
                   <SortableContext
@@ -585,7 +557,7 @@ export default function DatasetTable({
                             onMouseDown={header.getResizeHandler()}
                             onTouchStart={header.getResizeHandler()}
                             className={cn(
-                              "absolute right-0 top-0 w-1 h-full cursor-col-resize select-none touch-none "
+                              "absolute right-0 top-0 w-1 h-full cursor-col-resize select-none touch-none"
                             )}
                           />
                         )}
@@ -595,26 +567,14 @@ export default function DatasetTable({
                 </tr>
               ))}
             </thead>
-          </table>
-        </div>
 
-        <div
-          ref={bodyScrollRef}
-          className="flex-1 overflow-auto min-h-0 h-0 overscroll-none"
-        >
-          <table
-            className="border-collapse bg-[var(--background)]"
-            style={{
-              width: table.getCenterTotalSize(),
-            }}
-          >
             <tbody>
               {table.getRowModel().rows.length > 0 &&
                 table.getRowModel().rows.map((row) => (
                   <tr
                     key={row.id}
                     className={cn(
-                      "transition-colors duration-150 hover:bg-[var(--background-secondary)] h-auto",
+                      "transition-colors duration-150 hover:bg-[var(--background-secondary)] overflow-y-auto",
                       row.getIsSelected()
                         ? "bg-[var(--background-secondary)]"
                         : "bg-transparent"

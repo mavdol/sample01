@@ -37,7 +37,7 @@ export default function DraggableColumnHeader({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center justify-between min-w-0 h-full px-4"
+      className="flex items-center justify-between min-w-0 h-full px-4 outline-[var(--border)] outline-1 outline-solid px-4"
     >
       <div className="flex items-center justify-start gap-2 min-w-0 flex-1">
         <div

@@ -8,6 +8,7 @@ import { useCurrentDataset } from "@/hooks/useCurrentDataset";
 import { CheckCircle } from "lucide-react";
 import { JSONEditor } from "@/components/ui/editor";
 import { useTranslation } from "react-i18next";
+import { RulesHelpPopover } from "./RulesHelpPopover";
 
 interface ColumnFormSlideOverProps {
   isOpen: boolean;
@@ -29,6 +30,13 @@ interface ColumnReference {
   name: string;
   isValid: boolean;
   isCircular: boolean;
+  start: number;
+  end: number;
+}
+
+interface RandomCommand {
+  type: "single" | "range";
+  text: string;
   start: number;
   end: number;
 }
@@ -75,6 +83,43 @@ export default function ColumnFormSlideOver({
     setErrors({});
   }, [column, mode, isOpen]);
 
+  const randomCommands = useMemo((): RandomCommand[] => {
+    if (!formData.rules) return [];
+
+    const commands: RandomCommand[] = [];
+
+    // Match @RANDOM_INT_X_Y (range pattern)
+    const rangeRegex = /@RANDOM_INT_(\d+)_(\d+)/g;
+    let match;
+    while ((match = rangeRegex.exec(formData.rules)) !== null) {
+      commands.push({
+        type: "range",
+        text: match[0],
+        start: match.index,
+        end: match.index + match[0].length,
+      });
+    }
+
+    // Match @RANDOM_INT_X (single pattern)
+    const singleRegex = /@RANDOM_INT_(\d+)/g;
+    while ((match = singleRegex.exec(formData.rules)) !== null) {
+      // Check if this is already part of a range command
+      const isPartOfRange = commands.some(
+        (cmd) => match!.index >= cmd.start && match!.index < cmd.end
+      );
+      if (!isPartOfRange) {
+        commands.push({
+          type: "single",
+          text: match[0],
+          start: match.index,
+          end: match.index + match[0].length,
+        });
+      }
+    }
+
+    return commands.sort((a, b) => a.start - b.start);
+  }, [formData.rules]);
+
   const columnReferences = useMemo((): ColumnReference[] => {
     if (!formData.rules) return [];
 
@@ -84,6 +129,13 @@ export default function ColumnFormSlideOver({
 
     while ((match = regex.exec(formData.rules)) !== null) {
       const refName = match[1];
+
+      // Skip if this is part of a @RANDOM_INT command
+      const isRandomCommand = randomCommands.some(
+        (cmd) => match!.index >= cmd.start && match!.index < cmd.end
+      );
+      if (isRandomCommand) continue;
+
       const columnExists = columns.some((col) => col.name === refName);
 
       const isCircular =
@@ -100,7 +152,7 @@ export default function ColumnFormSlideOver({
     }
 
     return references;
-  }, [formData.rules, formData.name, columns, column, mode]);
+  }, [formData.rules, formData.name, columns, column, mode, randomCommands]);
 
   const validateJSONStructure = (
     jsonStr: string
@@ -278,33 +330,86 @@ export default function ColumnFormSlideOver({
   const renderHighlightedText = () => {
     if (!formData.rules) return "";
 
+    // Combine all highlights (column refs + random commands) and sort by position
+    const allHighlights = [
+      ...columnReferences.map((ref) => ({
+        type: "column" as const,
+        start: ref.start,
+        end: ref.end,
+        data: ref,
+      })),
+      ...randomCommands.map((cmd) => ({
+        type: "random" as const,
+        start: cmd.start,
+        end: cmd.end,
+        data: cmd,
+      })),
+    ].sort((a, b) => a.start - b.start);
+
     const parts: React.ReactElement[] = [];
     let lastIndex = 0;
 
-    columnReferences.forEach((ref, idx) => {
-      if (ref.start > lastIndex) {
+    allHighlights.forEach((highlight, idx) => {
+      // Add non-highlighted text before this highlight
+      if (highlight.start > lastIndex) {
         parts.push(
           <span key={`text-${idx}-${Date.now()}`} className="opacity-0">
-            {formData.rules.substring(lastIndex, ref.start)}
+            {formData.rules.substring(lastIndex, highlight.start)}
           </span>
         );
       }
 
-      const refText = formData.rules.substring(ref.start, ref.end);
-      parts.push(
-        <span
-          key={`ref-${idx}-${Date.now()}`}
-          className={`${
-            ref.isCircular || !ref.isValid ? "bg-red-500/50" : "bg-green-600/20"
-          } rounded px-0.5`}
-        >
-          {refText}
-        </span>
+      const highlightText = formData.rules.substring(
+        highlight.start,
+        highlight.end
       );
 
-      lastIndex = ref.end;
+      if (highlight.type === "column") {
+        const ref = highlight.data as ColumnReference;
+        parts.push(
+          <span
+            key={`col-${idx}-${Date.now()}`}
+            className={`${
+              ref.isCircular || !ref.isValid
+                ? "bg-red-500/50"
+                : "bg-green-600/20"
+            } rounded px-0.5`}
+            title={
+              ref.isCircular
+                ? "Circular reference"
+                : !ref.isValid
+                ? "Column not found"
+                : `Reference to column: ${ref.name}`
+            }
+          >
+            {highlightText}
+          </span>
+        );
+      } else if (highlight.type === "random") {
+        const cmd = highlight.data as RandomCommand;
+        parts.push(
+          <span
+            key={`rand-${idx}-${Date.now()}`}
+            className="bg-blue-600/20 rounded px-0.5"
+            title={
+              cmd.type === "single"
+                ? `Random integer from 0 to ${
+                    cmd.text.match(/@RANDOM_INT_(\d+)/)?.[1] || ""
+                  }-1`
+                : `Random integer from ${
+                    cmd.text.match(/@RANDOM_INT_(\d+)_(\d+)/)?.[1] || ""
+                  } to ${cmd.text.match(/@RANDOM_INT_(\d+)_(\d+)/)?.[2] || ""}`
+            }
+          >
+            {highlightText}
+          </span>
+        );
+      }
+
+      lastIndex = highlight.end;
     });
 
+    // Add remaining text after all highlights
     if (lastIndex < formData.rules.length) {
       parts.push(
         <span key={`text-end-${Date.now()}`} className="opacity-0">
@@ -359,13 +464,13 @@ export default function ColumnFormSlideOver({
         />
 
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-400 text-[var(--foreground-secondary)]">
-            {t("datasets.columns.generation_rules")}{" "}
-            <span className="text-[var(--error)]">*</span>
-          </label>
-          <p className="text-xs text-[var(--foreground-secondary)] -mt-1">
-            {t("datasets.columns.generation_rules_description")}
-          </p>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-400 text-[var(--foreground-secondary)]">
+              {t("datasets.columns.generation_rules")}{" "}
+              <span className="text-[var(--error)]">*</span>
+            </label>
+            <RulesHelpPopover />
+          </div>
 
           <div className="relative">
             <div
@@ -401,7 +506,9 @@ export default function ColumnFormSlideOver({
                 }`}
               style={{
                 background:
-                  columnReferences.length > 0 ? "transparent" : undefined,
+                  columnReferences.length > 0 || randomCommands.length > 0
+                    ? "transparent"
+                    : undefined,
                 caretColor: "var(--foreground)",
                 minHeight: "96px",
               }}

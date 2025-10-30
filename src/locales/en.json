@@ -147,7 +147,7 @@
       "column_name": "Column Name",
       "column_name_placeholder": "e.g., email, age, price",
       "generation_rules": "Generation Rules",
-      "generation_rules_description": "Define how AI should generate content. Use @columnName to reference other columns.",
+      "generation_rules_description": "Define how AI should generate content. Use @columnName to reference other columns. Use @RANDOM_INT_X for random 0 to X-1, or @RANDOM_INT_X_Y for range X to Y.",
       "json_structure": "JSON Structure",
       "json_structure_description": "Define the expected JSON structure. Valid types: string, number, boolean, object, array, null",
       "valid_json_structure": "Valid JSON structure",
@@ -157,7 +157,17 @@
       "delete_column": "Delete Column",
       "empty_dataset": "Empty dataset",
       "empty_dataset_description": "Generate your first rows to get started",
-      "column_type": "Column Type"
+      "column_type": "Column Type",
+      "help": {
+        "title": "Available Commands",
+        "show_examples": "Show command examples",
+        "column_reference_description": "Reference another column's value",
+        "column_reference_example": "Gender for @name",
+        "random_single_description": "Random integer from 0 to X-1",
+        "random_single_example": "Age bracket (@RANDOM_INT_5): 0=young adult (18-30), 1=adult (31-45), 2=middle-age (46-60), 3=senior (61-75), 4=elderly (76-85)",
+        "random_range_description": "Random integer from X to Y (inclusive)",
+        "random_range_example": "Patient age: @RANDOM_INT_18_85"
+      }
     },
     "notifications": {
       "generation_complete": "Generation Complete",

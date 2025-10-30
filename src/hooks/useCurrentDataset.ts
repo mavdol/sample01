@@ -57,7 +57,7 @@ export function useCurrentDataset(): CurrentDatasetInfo {
     updateRowInStore,
     updateMultipleColumnsInStore,
     removeColumnFromStore,
-    updateDatasetRowCount,
+    decrementDatasetRowCount,
   } = useDatasetStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -315,7 +315,7 @@ export function useCurrentDataset(): CurrentDatasetInfo {
       });
 
       setRows(rows.filter((row) => row.id.toString() !== rowId.toString()));
-      updateDatasetRowCount(currentDataset.id, currentDataset.rowCount - 1);
+      decrementDatasetRowCount(currentDataset.id);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to delete row";
