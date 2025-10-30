@@ -6,12 +6,12 @@ Generate a {format} value for column "{column_name}".
 
 Rule: {column_rule}
 
-Perspective: {persona}
-{words_to_avoid}
+CRITICAL:
+- If the rule references other values from the same record, your response MUST be logically consistent with those values
+- Reply with a SINGLE LINE only - no newlines, no extra content
+- Output ONLY the raw value, nothing else
 
-CRITICAL: If the rule references other values from the same record (like names, IDs, or previously generated fields), your response MUST be logically consistent with those values. Consistency is MORE IMPORTANT than diversity.
-
-Reply with ONLY the raw value, nothing else.<|eot_id|>
+<|eot_id|>
 
 <|start_header_id|>assistant<|end_header_id|>
 "#;

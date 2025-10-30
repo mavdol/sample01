@@ -44,7 +44,7 @@ impl Default for InferenceConfig {
     fn default() -> Self {
         Self {
             max_tokens: 256,
-            temperature: 0.8,
+            temperature: 1.2,
             top_k: 40,
             top_p: 0.90,
             batch_size: 512,
@@ -614,7 +614,34 @@ impl GenerationService {
                 break;
             }
 
-            let next_token = candidates[0].id();
+            let next_token = if config.temperature > 0.0 && candidates.len() > 1 {
+                let scaled_logits: Vec<f32> = candidates
+                    .iter()
+                    .map(|c| c.logit() / config.temperature)
+                    .collect();
+
+                let max_logit = scaled_logits.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+                let exp_logits: Vec<f32> = scaled_logits.iter().map(|&l| (l - max_logit).exp()).collect();
+                let sum_exp: f32 = exp_logits.iter().sum();
+                let probabilities: Vec<f32> = exp_logits.iter().map(|&e| e / sum_exp).collect();
+
+                let mut rng = rand::thread_rng();
+                let random_value: f32 = rng.gen();
+                let mut cumulative = 0.0;
+                let mut selected_idx = 0;
+
+                for (idx, &prob) in probabilities.iter().enumerate() {
+                    cumulative += prob;
+                    if random_value <= cumulative {
+                        selected_idx = idx;
+                        break;
+                    }
+                }
+
+                candidates[selected_idx].id()
+            } else {
+                candidates[0].id()
+            };
 
             if next_token == model.token_eos() {
                 break;
@@ -697,7 +724,6 @@ impl GenerationService {
             }
         }
 
-        // First, replace @RANDOM_INT_X_Y (range) commands
         let random_range_regex = get_random_int_range_regex();
         let mut rng = rand::thread_rng();
         let after_range_random = random_range_regex.replace_all(&for_column.rules, |caps: &regex::Captures| {
@@ -707,7 +733,6 @@ impl GenerationService {
             random_value.to_string()
         });
 
-        // Then, replace @RANDOM_INT_X (single) commands
         let random_single_regex = get_random_int_single_regex();
         let after_single_random = random_single_regex.replace_all(&after_range_random, |caps: &regex::Captures| {
             let max: i64 = caps.get(1).unwrap().as_str().parse().unwrap_or(1);
@@ -715,7 +740,6 @@ impl GenerationService {
             random_value.to_string()
         });
 
-        // Finally, replace @column_name references
         let column_ref_regex = get_column_ref_regex();
         let processed_rules = column_ref_regex.replace_all(&after_single_random, |caps: &regex::Captures| {
             caps.get(1)
@@ -735,7 +759,6 @@ impl GenerationService {
             .replace("{column_name}", &for_column.name)
             .replace("{column_rule}", &processed_rules)
             .replace("{format}", &format_str);
-
 
         Ok(prompt)
     }
@@ -802,18 +825,15 @@ impl GenerationService {
     fn clean_text_artifacts(text: &str) -> String {
         let mut cleaned = text.trim();
 
-        // First, remove leading artifacts
         cleaned = cleaned.trim_start_matches("```").trim_start();
         cleaned = cleaned.trim_start_matches("\\\"").trim_start();
 
-        // Then check for code blocks and cut at first occurrence (only if there's content before it)
         if let Some(start) = cleaned.find("```") {
             if start > 0 {
                 cleaned = &cleaned[..start];
             }
         }
 
-        // Remove trailing artifacts in a loop
         loop {
             let before = cleaned.len();
             cleaned = cleaned.trim_end_matches("```").trim_end();
@@ -830,7 +850,6 @@ impl GenerationService {
 
         let trimmed = cleaned.trim();
 
-        // Handle quoted strings
         if trimmed.len() > 1 {
             if (trimmed.starts_with('"') && trimmed.ends_with('"'))
                 || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
@@ -1083,6 +1102,46 @@ mod tests {
                     assert!(prompt.contains("JSON"));
                     assert!(prompt.contains("structure details"));
                     assert!(prompt.contains(r#"{"name": "string", "age": "number"}"#));
+                } else {
+                    println!("Skipping test due to backend initialization failure");
+                }
+            }
+
+            #[test]
+            fn test_random_int_commands_produce_different_values() {
+                setup_test_environment();
+                if let Some(generation_service) = get_test_service() {
+                    let columns = vec![Column {
+                        id: Some(1),
+                        table_name: "test_table".to_string(),
+                        dataset_id: 1,
+                        name: "age".to_string(),
+                        column_type: "INT".to_string(),
+                        column_type_details: None,
+                        rules: "Patient age: @RANDOM_INT_18_85".to_string(),
+                        position: 1,
+                    }];
+                    let row_data = vec![];
+
+                    // Generate 5 prompts and check they have different random values
+                    let mut generated_rules = Vec::new();
+                    for _ in 0..5 {
+                        let prompt = generation_service
+                            .prepare_prompt(&columns, &columns[0], &row_data)
+                            .expect("Failed to prepare prompt");
+
+                        // Extract the rule from the prompt
+                        if let Some(start) = prompt.find("Rule: ") {
+                            let rule_part = &prompt[start + 6..];
+                            if let Some(end) = rule_part.find("\n") {
+                                generated_rules.push(rule_part[..end].to_string());
+                            }
+                        }
+                    }
+
+                    // Check that we got different values (at least some should be different)
+                    let unique_count = generated_rules.iter().collect::<std::collections::HashSet<_>>().len();
+                    assert!(unique_count > 1, "Random commands should produce different values. Got: {:?}", generated_rules);
                 } else {
                     println!("Skipping test due to backend initialization failure");
                 }
